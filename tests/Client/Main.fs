@@ -30,11 +30,17 @@ type Page =
     | [<EndPoint "/">] Form
     | [<EndPoint "/collection">] Collection
     | [<EndPoint "/collection-item/{key}">] Item of key: int * model: PageModel<int>
+    | [<EndPoint "/lazy">] Lazy
 
 type Item =
     {
         K: int
         V: string
+    }
+
+type LazyModel =
+    {
+        value: int
     }
 
 type Model =
@@ -47,6 +53,8 @@ type Model =
         remoteResult: option<string>
         radioItem: option<int>
         page: Page
+        nonLazyValue: int
+        lazyModel: LazyModel
     }
 
 type Message =
@@ -59,6 +67,8 @@ type Message =
     | SetRevOrder of rev: bool
     | SetRadioItem of int
     | SetPage of Page
+    | IncNonLazyVal
+    | IncLazyVal
 
 let initModel _ =
     {
@@ -75,10 +85,12 @@ let initModel _ =
         radioItem = None
         page = Form
         remoteResult = None
+        nonLazyValue = 0
+        lazyModel = { LazyModel.value = 0 }
     }
 
 let defaultPageModel = function
-    | Form | Collection -> ()
+    | Form | Collection | Lazy -> ()
     | Item (_, m) -> Router.definePageModel m 10
 let router = Router.inferWithModel SetPage (fun m -> m.page) defaultPageModel
 
@@ -103,6 +115,8 @@ let update message model =
     | SetRevOrder rev -> { model with revOrder = rev }, []
     | SetRadioItem i -> { model with radioItem = Some i }, []
     | SetPage p -> { model with page = p }, []
+    | IncNonLazyVal -> { model with nonLazyValue = model.nonLazyValue + 1 }, []
+    | IncLazyVal -> { model with lazyModel = { LazyModel.value = model.lazyModel.value + 1 } }, []
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -167,7 +181,7 @@ type CollectionTemplate = Template<"collection.html">
 type ViewItem() =
     inherit ElmishComponent<int * string, Message>()
 
-    override this.View ((k, v)) dispatch =
+    override _.View ((k, v)) dispatch =
         CollectionTemplate.Item()
             .Value(v)
             .SetKey(fun _ -> dispatch (SetKeyOf k))
@@ -192,7 +206,7 @@ let viewCollection model dispatch =
 type ViewItemPage() =
     inherit ElmishComponent<int * string * int, Message>()
 
-    override this.View ((k, v, m)) dispatch =
+    override _.View ((k, v, m)) dispatch =
         concat [
             p [] [text ("Viewing page for item #" + string k)]
             p [] [text ("Text is: " + v)]
@@ -205,6 +219,25 @@ type ViewItemPage() =
             ]
         ]
 
+let viewLazy model dispatch =
+    div [] [
+        pre [] [
+            text """
+let viewLazy model dispatch =
+    div [] [
+        p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
+        p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
+        p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
+        p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
+    ]
+            """
+        ]
+        p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
+        p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
+        p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
+        p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
+    ]
+
 let view js model dispatch =
     concat [
         RawHtml """
@@ -215,11 +248,14 @@ let view js model dispatch =
             navLink NavLinkMatch.All [router.HRef Form] [text "Form"]
             text " "
             navLink NavLinkMatch.Prefix [router.HRef Collection] [text "Collection"]
+            text " "
+            navLink NavLinkMatch.Prefix [router.HRef Lazy] [text "Lazy"]
         ]
         cond model.page <| function
             | Form -> viewForm js model dispatch
             | Collection -> viewCollection model dispatch
             | Item (k, m) -> ecomp<ViewItemPage,_,_> [] (k, model.items.[k], m.Model) dispatch
+            | Lazy -> viewLazy model dispatch
     ]
 
 type MyApp() =

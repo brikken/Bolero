@@ -60,10 +60,32 @@ let forEach<'T> (items: seq<'T>) (mkNode: 'T -> Node) =
 let comp<'T when 'T :> IComponent> attrs children =
     Node.BlazorComponent<'T>(attrs, children)
 
+let private compParamAttr = function
+    | ComponentParameter.Model model -> "Model" => model
+    | ComponentParameter.Dispatch dispatch -> "Dispatch" => dispatch
+    | ComponentParameter.ViewFunction vf -> "ViewFunction" => vf
+    | ComponentParameter.Equal e -> "Equal" => e
+
 /// Create a fragment from an Elmish component.
 let ecomp<'T, 'model, 'msg when 'T :> ElmishComponent<'model, 'msg>>
         (attrs: list<Attr>) (model: 'model) (dispatch: Elmish.Dispatch<'msg>) =
-    comp<'T> (attrs @ ["Model" => model; "Dispatch" => dispatch]) []
+    comp<'T> (attrs @ ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch] |> List.map compParamAttr)) []
+
+/// Create a fragment with a lazily rendered view function
+let lazyComp (viewFunction: 'model -> Node) (model: 'model) =
+    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.ViewFunction (fun m _ -> viewFunction m); ] |> List.map compParamAttr) []
+
+/// Create a fragment with a lazily rendered view function and a custom equality
+let lazyCompWith (equal: 'model -> 'model -> bool) (viewFunction: 'model -> Node) (model: 'model) =
+    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.ViewFunction (fun m _ -> viewFunction m); ComponentParameter.Equal equal; ] |> List.map compParamAttr) []
+
+/// Create a fragment with a lazily rendered view function
+let lazyComp2 (viewFunction: 'model -> Elmish.Dispatch<'msg> -> Node) (model: 'model) (dispatch: Elmish.Dispatch<'msg>) =
+    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ] |> List.map compParamAttr) []
+
+/// Create a fragment with a lazily rendered view function and a custom equality
+let lazyComp2With (equal: 'model -> 'model -> bool) (viewFunction: 'model -> Elmish.Dispatch<'msg> -> Node) (model: 'model) (dispatch: Elmish.Dispatch<'msg>) =
+    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ComponentParameter.Equal equal; ] |> List.map compParamAttr) []
 
 /// Create a navigation link which toggles its `active` class
 /// based on whether the current URI matches its `href`.

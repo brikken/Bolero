@@ -29,6 +29,17 @@ open Microsoft.JSInterop
 open Elmish
 open Bolero.Render
 
+type ModelParameter<'model> = 'model
+type DispatchParameter<'msg> = Dispatch<'msg>
+type ViewFunctionParameter<'model,'msg> = 'model -> Dispatch<'msg> -> Node
+type EqualParameter<'model> = 'model -> 'model -> bool
+[<RequireQualifiedAccess>]
+type ComponentParameter<'model,'msg> =
+    | Model of ModelParameter<'model>
+    | Dispatch of DispatchParameter<'msg>
+    | ViewFunction of ViewFunctionParameter<'model,'msg>
+    | Equal of EqualParameter<'model>
+
 /// A component built from `Html.Node`s.
 [<AbstractClass>]
 type Component() =
@@ -50,7 +61,7 @@ type Component<'model>() =
 
     /// Compare the old model with the new to decide whether this component
     /// needs to be re-rendered.
-    abstract ShouldRender : oldModel: 'model * newModel: 'model -> bool
+    abstract member ShouldRender : oldModel: 'model * newModel: 'model -> bool
     default this.ShouldRender(oldModel, newModel) =
         not <| obj.ReferenceEquals(oldModel, newModel)
 
@@ -59,26 +70,42 @@ type Component<'model>() =
 type ElmishComponent<'model, 'msg>() =
     inherit Component<'model>()
 
-    let mutable oldModel = Unchecked.defaultof<'model>
+    member val internal OldModel = Unchecked.defaultof<ModelParameter<'model>> with get, set
 
     /// The current value of the Elmish model.
     /// Can be just a part of the full program's model.
     [<Parameter>]
-    member val Model = Unchecked.defaultof<'model> with get, set
+    member val Model = Unchecked.defaultof<ModelParameter<'model>> with get, set
 
     /// The Elmish dispatch function.
     [<Parameter>]
-    member val Dispatch = Unchecked.defaultof<Dispatch<'msg>> with get, set
+    member val Dispatch = Unchecked.defaultof<DispatchParameter<'msg>> with get, set
 
     /// The Elmish view function.
-    abstract View : 'model -> Dispatch<'msg> -> Node    
+    abstract View : 'model -> Dispatch<'msg> -> Node
 
     override this.ShouldRender() =
-       this.ShouldRender(oldModel, this.Model)
+        base.ShouldRender(this.OldModel, this.Model)
 
     override this.Render() =
-        oldModel <- this.Model
+        this.OldModel <- this.Model
         this.View this.Model this.Dispatch
+
+type LazyComponent<'model,'msg>() as self =
+    inherit ElmishComponent<'model,'msg>()
+
+    /// The view function
+    [<Parameter>]
+    member val ViewFunction = Unchecked.defaultof<ViewFunctionParameter<'model,'msg>> with get, set
+
+    /// The optional custom equality check
+    // Uses default equality from base class
+    [<Parameter>]
+    member val Equal : EqualParameter<'model> = (fun m1 m2 -> self.ShouldRender(m1,m2)) with get, set
+
+    override this.View model dispatch = this.ViewFunction model dispatch
+
+    override this.ShouldRender() = this.Equal this.OldModel this.Model
 
 type IProgramComponent =
     abstract Services : System.IServiceProvider
