@@ -42,6 +42,8 @@ type LazyModel =
     {
         value: int
     }
+with
+    static member Default = { LazyModel.value = 0 }
 
 type Model =
     {
@@ -55,6 +57,7 @@ type Model =
         page: Page
         nonLazyValue: int
         lazyModel: LazyModel
+        lazyModels: LazyModel list
     }
 
 type Message =
@@ -69,6 +72,7 @@ type Message =
     | SetPage of Page
     | IncNonLazyVal
     | IncLazyVal
+    | InsertLazyModelAt of int
 
 let initModel _ =
     {
@@ -86,7 +90,8 @@ let initModel _ =
         page = Form
         remoteResult = None
         nonLazyValue = 0
-        lazyModel = { LazyModel.value = 0 }
+        lazyModel = LazyModel.Default
+        lazyModels = [for _ in [1..5] -> LazyModel.Default ]
     }
 
 let defaultPageModel = function
@@ -117,6 +122,7 @@ let update message model =
     | SetPage p -> { model with page = p }, []
     | IncNonLazyVal -> { model with nonLazyValue = model.nonLazyValue + 1 }, []
     | IncLazyVal -> { model with lazyModel = { LazyModel.value = model.lazyModel.value + 1 } }, []
+    | InsertLazyModelAt i -> let (first,last) = model.lazyModels |> List.splitAt i in { model with lazyModels = first @ [LazyModel.Default] @ last }, []
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -221,21 +227,33 @@ type ViewItemPage() =
 
 let viewLazy model dispatch =
     div [] [
-        pre [] [
-            text """
-let viewLazy model dispatch =
-    div [] [
-        p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
-        p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
-        p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
-        p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
-    ]
-            """
+        div [] [
+            pre [] [
+                text """
+    let viewLazy model dispatch =
+        div [] [
+            p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
+            p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
+            p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
+            p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
         ]
-        p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
-        p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
-        p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
-        p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
+                """
+            ]
+            p [] [button [on.click (fun _ -> dispatch IncNonLazyVal)] [text "Increase non-lazy value"]]
+            p [] [button [on.click (fun _ -> dispatch IncLazyVal)] [text "Increase lazy value"]]
+            p [] [text (sprintf "Non-lazy value: %i, re-render random number check: %i" model.nonLazyValue (System.Random().Next()))]
+            p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
+        ]
+        div [] [
+            forEach (List.indexed model.lazyModels) (fun (n, model') ->
+                p [] [
+                    lazyComp (fun m -> text (sprintf "Row number %i, lazy value: %i, re-render random number check: %i" n m.value (System.Random().Next()))) model'
+                    forEach [("before",n); ("after",n+1)] (fun (t,n') ->
+                        button [on.click (fun _ -> dispatch (InsertLazyModelAt n'))] [text (sprintf "Insert %s" t)]
+                    )
+                ]
+            )
+        ]
     ]
 
 let view js model dispatch =
