@@ -41,9 +41,10 @@ type Item =
 type LazyModel =
     {
         value: int
+        guid: System.Guid
     }
 with
-    static member Default = { LazyModel.value = 0 }
+    static member Default = { LazyModel.value = 0; guid = System.Guid.NewGuid(); }
 
 type Model =
     {
@@ -73,6 +74,7 @@ type Message =
     | IncNonLazyVal
     | IncLazyVal
     | InsertLazyModelAt of int
+    | ShuffleLazy
 
 let initModel _ =
     {
@@ -104,6 +106,16 @@ type MyRemoting =
         greet: string -> Async<string>
     }
 
+// shuffle an array (in-place)
+let shuffle a =
+    let rand = new System.Random()
+    let swap (a: _[]) x y =
+        let tmp = a.[x]
+        a.[x] <- a.[y]
+        a.[y] <- tmp
+    Array.iteri (fun i _ -> swap a i (rand.Next(i, Array.length a))) a
+    a
+
 let update message model =
     match message with
     | SetInput text -> { model with input = text }, []
@@ -121,8 +133,9 @@ let update message model =
     | SetRadioItem i -> { model with radioItem = Some i }, []
     | SetPage p -> { model with page = p }, []
     | IncNonLazyVal -> { model with nonLazyValue = model.nonLazyValue + 1 }, []
-    | IncLazyVal -> { model with lazyModel = { LazyModel.value = model.lazyModel.value + 1 } }, []
+    | IncLazyVal -> { model with lazyModel = { model.lazyModel with LazyModel.value = model.lazyModel.value + 1 } }, []
     | InsertLazyModelAt i -> let (first,last) = model.lazyModels |> List.splitAt i in { model with lazyModels = first @ [LazyModel.Default] @ last }, []
+    | ShuffleLazy -> { model with lazyModels = model.lazyModels |> List.toArray |> shuffle |> List.ofArray }, []
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -245,8 +258,9 @@ let viewLazy model dispatch =
             p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
         ]
         div [] [
-            forEach (List.indexed model.lazyModels) (fun (n, model') ->
-                p [] [
+            button [on.click (fun _ -> dispatch ShuffleLazy)] [text "Shuffle"]
+            forEach (model.lazyModels |> List.indexed) (fun (n, model') ->
+                p [attr.key model'.guid] [
                     lazyComp (fun m -> text (sprintf "Row number %i, lazy value: %i, re-render random number check: %i" n m.value (System.Random().Next()))) model'
                     forEach [("before",n); ("after",n+1)] (fun (t,n') ->
                         button [on.click (fun _ -> dispatch (InsertLazyModelAt n'))] [text (sprintf "Insert %s" t)]
