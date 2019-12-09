@@ -59,6 +59,7 @@ type Model =
         nonLazyValue: int
         lazyModel: LazyModel
         lazyModels: LazyModel list
+        lazyUseKey: bool
     }
 
 type Message =
@@ -75,6 +76,7 @@ type Message =
     | IncLazyVal
     | InsertLazyModelAt of int
     | ShuffleLazy
+    | SetLazyUseKey of bool
 
 let initModel _ =
     {
@@ -94,6 +96,7 @@ let initModel _ =
         nonLazyValue = 0
         lazyModel = LazyModel.Default
         lazyModels = [for _ in [1..5] -> LazyModel.Default ]
+        lazyUseKey = true
     }
 
 let defaultPageModel = function
@@ -136,6 +139,7 @@ let update message model =
     | IncLazyVal -> { model with lazyModel = { model.lazyModel with LazyModel.value = model.lazyModel.value + 1 } }, []
     | InsertLazyModelAt i -> let (first,last) = model.lazyModels |> List.splitAt i in { model with lazyModels = first @ [LazyModel.Default] @ last }, []
     | ShuffleLazy -> { model with lazyModels = model.lazyModels |> List.toArray |> shuffle |> List.ofArray }, []
+    | SetLazyUseKey u -> { model with lazyUseKey = u }, []
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -241,6 +245,7 @@ type ViewItemPage() =
 let viewLazy model dispatch =
     div [] [
         div [] [
+            h1 [] [text "Simple lazy evaluation test"]
             pre [] [
                 text """
     let viewLazy model dispatch =
@@ -258,9 +263,17 @@ let viewLazy model dispatch =
             p [] [lazyComp (fun m -> text (sprintf "Lazy value: %i, re-render random number check: %i" m.value (System.Random().Next()))) model.lazyModel]
         ]
         div [] [
-            button [on.click (fun _ -> dispatch ShuffleLazy)] [text "Shuffle"]
+            h1 [] [text "Lazy components, forEach and keys"]
+            p [] [button [on.click (fun _ -> dispatch ShuffleLazy)] [text "Shuffle"]]
+            p [] [
+                input [
+                    attr.``type`` "checkbox"
+                    bind.``checked`` model.lazyUseKey (fun u -> dispatch (SetLazyUseKey u))
+                ]
+                text " use key"
+            ]
             forEach (model.lazyModels |> List.indexed) (fun (n, model') ->
-                p [attr.key model'.guid] [
+                p [attr.key (if model.lazyUseKey then (model'.guid.ToString()) else null)] [
                     lazyComp (fun m -> text (sprintf "Row number %i, lazy value: %i, re-render random number check: %i" n m.value (System.Random().Next()))) model'
                     forEach [("before",n); ("after",n+1)] (fun (t,n') ->
                         button [on.click (fun _ -> dispatch (InsertLazyModelAt n'))] [text (sprintf "Insert %s" t)]
