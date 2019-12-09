@@ -81,11 +81,11 @@ let lazyCompWith (equal: 'model -> 'model -> bool) (viewFunction: 'model -> Node
 
 /// Create a fragment with a lazily rendered view function
 let lazyComp2 (viewFunction: 'model -> Elmish.Dispatch<'msg> -> Node) (model: 'model) (dispatch: Elmish.Dispatch<'msg>) =
-    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ] |> List.map compParamAttr) []
+    comp<LazyComponent<'model,'msg>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ] |> List.map compParamAttr) []
 
 /// Create a fragment with a lazily rendered view function and a custom equality
 let lazyComp2With (equal: 'model -> 'model -> bool) (viewFunction: 'model -> Elmish.Dispatch<'msg> -> Node) (model: 'model) (dispatch: Elmish.Dispatch<'msg>) =
-    comp<LazyComponent<'model,_>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ComponentParameter.Equal equal; ] |> List.map compParamAttr) []
+    comp<LazyComponent<'model,'msg>> ([ComponentParameter.Model model; ComponentParameter.Dispatch dispatch; ComponentParameter.ViewFunction viewFunction; ComponentParameter.Equal equal; ] |> List.map compParamAttr) []
 
 /// Create a navigation link which toggles its `active` class
 /// based on whether the current URI matches its `href`.
