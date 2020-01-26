@@ -31,6 +31,7 @@ type Page =
     | [<EndPoint "/collection">] Collection
     | [<EndPoint "/collection-item/{key}">] Item of key: int * model: PageModel<int>
     | [<EndPoint "/lazy">] Lazy
+    | [<EndPoint "/bind">] Bind
 
 type Item =
     {
@@ -56,6 +57,7 @@ type Model =
         page: Page
         nonLazyValue: int
         lazyModel: LazyModel
+        bind: Binding.Model
     }
 
 type Message =
@@ -71,6 +73,7 @@ type Message =
     | IncNonLazyVal
     | IncLazyVal
     | SetLazyNonEqVal of string
+    | BindMsg of Binding.Message
 
 let initModel _ =
     {
@@ -89,10 +92,11 @@ let initModel _ =
         remoteResult = None
         nonLazyValue = 0
         lazyModel = { LazyModel.value = 0; nonEqVal = "I'm not tested in custom equality"; }
+        bind = Binding.init
     }
 
 let defaultPageModel = function
-    | Form | Collection | Lazy -> ()
+    | Form | Collection | Lazy | Bind -> ()
     | Item (_, m) -> Router.definePageModel m 10
 let router = Router.inferWithModel SetPage (fun m -> m.page) defaultPageModel
 
@@ -120,6 +124,7 @@ let update message model =
     | IncNonLazyVal -> { model with nonLazyValue = model.nonLazyValue + 1 }, []
     | IncLazyVal -> { model with lazyModel = { model.lazyModel with LazyModel.value = model.lazyModel.value + 1 } }, []
     | SetLazyNonEqVal s -> { model with lazyModel = { model.lazyModel with LazyModel.nonEqVal = s } }, []
+    | BindMsg bmsg -> let bmodel, mcmd = Binding.update model.bind bmsg in { model with bind = bmodel; }, Cmd.map BindMsg mcmd
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -261,12 +266,15 @@ let view js model dispatch =
             navLink NavLinkMatch.Prefix [router.HRef Collection] [text "Collection"]
             text " "
             navLink NavLinkMatch.Prefix [router.HRef Lazy] [text "Lazy"]
+            text " "
+            navLink NavLinkMatch.Prefix [router.HRef Bind] [text "Bind"]
         ]
         cond model.page <| function
             | Form -> viewForm js model dispatch
             | Collection -> viewCollection model dispatch
             | Item (k, m) -> ecomp<ViewItemPage,_,_> [] (k, model.items.[k], m.Model) dispatch
             | Lazy -> viewLazy model dispatch
+            | Bind -> Binding.view model.bind (BindMsg >> dispatch)
     ]
 
 type MyApp() =
