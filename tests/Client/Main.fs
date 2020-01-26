@@ -30,6 +30,7 @@ type Page =
     | [<EndPoint "/">] Form
     | [<EndPoint "/collection">] Collection
     | [<EndPoint "/collection-item/{key}">] Item of key: int * model: PageModel<int>
+    | [<EndPoint "/bind">] Bind
 
 type Item =
     {
@@ -47,6 +48,7 @@ type Model =
         remoteResult: option<string>
         radioItem: option<int>
         page: Page
+        bind: Binding.Model
     }
 
 type Message =
@@ -59,6 +61,7 @@ type Message =
     | SetRevOrder of rev: bool
     | SetRadioItem of int
     | SetPage of Page
+    | BindMsg of Binding.Message
 
 let initModel _ =
     {
@@ -75,10 +78,11 @@ let initModel _ =
         radioItem = None
         page = Form
         remoteResult = None
+        bind = Binding.init
     }
 
 let defaultPageModel = function
-    | Form | Collection -> ()
+    | Form | Collection | Bind -> ()
     | Item (_, m) -> Router.definePageModel m 10
 let router = Router.inferWithModel SetPage (fun m -> m.page) defaultPageModel
 
@@ -103,6 +107,7 @@ let update message model =
     | SetRevOrder rev -> { model with revOrder = rev }, []
     | SetRadioItem i -> { model with radioItem = Some i }, []
     | SetPage p -> { model with page = p }, []
+    | BindMsg bmsg -> let bmodel, mcmd = Binding.update model.bind bmsg in { model with bind = bmodel; }, Cmd.map BindMsg mcmd
 
 // ondblclick's handler uses UIMouseEventArgs properties to check that we do generate specific UI*EventArgs.
 // ondblclick isn't handled in the "super" case to check that we correctly generate no-op when an event hole is unfilled.
@@ -215,11 +220,14 @@ let view js model dispatch =
             navLink NavLinkMatch.All [router.HRef Form] [text "Form"]
             text " "
             navLink NavLinkMatch.Prefix [router.HRef Collection] [text "Collection"]
+            text " "
+            navLink NavLinkMatch.Prefix [router.HRef Bind] [text "Bind"]
         ]
         cond model.page <| function
             | Form -> viewForm js model dispatch
             | Collection -> viewCollection model dispatch
             | Item (k, m) -> ecomp<ViewItemPage,_,_> [] (k, model.items.[k], m.Model) dispatch
+            | Bind -> Binding.view model.bind (BindMsg >> dispatch)
     ]
 
 type MyApp() =
